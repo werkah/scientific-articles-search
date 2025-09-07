@@ -1,0 +1,67 @@
+services:
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.18.0
+    container_name: elasticsearch
+    environment:
+      - discovery.type=single-node
+      - bootstrap.memory_lock=true
+      - xpack.security.enabled=false
+      - "ES_JAVA_OPTS=-Xms1g -Xmx1g"
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    volumes:
+      - esdata:/usr/share/elasticsearch/data
+    ports:
+      - 9200:9200
+    networks:
+      - app_network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s http://localhost:9200 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  backend:
+    build:
+      context: .
+      dockerfile: docker/backend.Dockerfile
+    container_name: search_backend
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    environment:             
+      - ELASTICSEARCH_HOST=elasticsearch
+      - ELASTICSEARCH_PORT=9200
+      - ELASTICSEARCH_URL=http://elasticsearch:9200
+    ports:
+      - 8000:8000
+    volumes:
+      - ./:/app
+    networks:
+      - app_network
+
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/frontend.Dockerfile
+    container_name: search_frontend
+    depends_on:
+      - backend
+    environment:
+      - API_URL=http://backend:8000
+    ports:
+      - 8050:8050
+    volumes:
+      - ./:/app
+    networks:
+      - app_network
+
+volumes:
+  esdata:
+    driver: local
+
+networks:
+  app_network:
+    driver: bridge
